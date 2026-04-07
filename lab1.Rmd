@@ -1,0 +1,92 @@
+---
+title: "bayesian lab1"
+output: html_document
+date: "2026-04-07"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1.
+
+```{r}
+s <- 43
+f <- 35
+n <- 10000
+alpha <- 7 + s
+beta <- 7 + f
+
+set.seed(123)
+X <- rbeta(n, shape1 = alpha, shape2 = beta)
+
+true_mu <- alpha/(alpha + beta)
+true_sd <- sqrt(alpha*beta/((alpha + beta)^2 * (alpha + beta + 1)))
+mu <- c()
+sd <- c()
+for (i in 1:n) {
+  mu <- c(mu, mean(X[1:i]))
+  sd <- c(sd, sd(X[1:i]))
+  
+}
+
+curve(dbeta(x, shape1 = alpha, shape2 = beta))
+
+plot(mu, t = "l")
+
+abline(h = true_mu, col = "red")
+
+plot(sd, t = "l")
+
+abline(h = true_sd, col = "red")
+
+```
+
+
+## 2.
+```{r}
+library(LaplacesDemon)
+y <- c(22, 33, 31, 49, 65, 78, 17, 24)
+mu <- 3.65
+n <- length(y)
+
+tao <- sum((log(y)-mu)^2) / n
+
+X <- rinvchisq(10000, n, tao)
+curve(dinvchisq(x, n, tao), from = 0.001, to = 3)
+
+```
+### b)
+
+```{r}
+library(bayestestR)
+
+# do not divide by 2 as it is symmetric, wasting compute
+y_sum <- sum(y)
+for (i in 2:n) {
+  for (j in 1:(i-1)) {
+    abs(y[i]-y[j])/(y_sum*n^2)
+  }
+  
+}
+
+Gini <- 2 * pnorm(X/sqrt(2), 0, 1) - 1
+print("Credible interval:")
+print(quantile(Gini, c(0.025, 0.975)) |> round(3))
+
+print("HPDI:")
+HPDI <- hdi(Gini)
+HPDI <- c(HPDI$CI_low, HPDI$CI_high)
+print(HPDI |> round(3))
+
+hist(Gini)
+abline(v = quantile(Gini, c(0.025, 0.975)), col = "blue")
+legend("topright", 
+       legend = c("Credible Interval", "HPDI"), 
+       fill = c("blue", "red"))
+
+abline(v = HPDI, col = "red")
+
+
+
+```
