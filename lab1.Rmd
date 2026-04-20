@@ -93,3 +93,109 @@ abline(v = HPDI, col = "red")
 
 
 ```
+
+## 3.
+### a)
+As the data points were independent observations from the Poisson distribution, the likelihood was 
+
+$$
+p(y \mid \lambda)
+= \prod_{i=1}^n \frac{e^{-\lambda}\lambda^{y_i}}{y_i!}
+$$
+which was then simplified and constants not depending on $\lambda$ were dropped:
+
+$$
+p(y \mid \lambda)
+= \prod_{i=1}^n \frac{e^{-\lambda}\lambda^{y_i}}{y_i!} = \frac{e^{-\lambda n}\lambda^{\sum y_i}}{\prod y_i!} \propto e^{-\lambda n}\lambda^{\sum y_i}
+$$
+Similarly, constants not depending on $\lambda$ in the prior were dropped:
+
+$$
+p(\lambda \mid \sigma)
+=
+\frac{\sqrt{2}}{\sigma\sqrt{\pi}}
+\exp\!\left(-\frac{\lambda^2}{2\sigma^2}\right)\propto e^{-\frac {\lambda^2}{2\sigma^2}},
+\quad \lambda \ge 0
+$$
+
+
+The posterior then, under Bayesian inference, becomes
+
+$$
+p(\lambda \mid y) \propto p(y \mid \lambda) \cdot p(\lambda \mid \sigma) 
+$$
+Using the expressions derived above, we obtain
+
+$$
+p(\lambda \mid y) \propto e^{-\lambda n}\lambda^{\sum y_i} \cdot e^{-\frac {\lambda^2}{2\sigma^2}} = e^{(-\lambda n - \frac {\lambda^2}{2\sigma^2} )}\lambda^{\sum y_i}
+$$
+
+Substituting $n=7$, $\sigma=5$ and $\sum y_i = 24$, we get
+
+$$
+p(\lambda \mid y) \propto e^{(-7\lambda  - \frac {\lambda^2}{50})}\lambda^{24}
+$$
+Since the normalizing constant does not admit a closed-form expression, the posterior distribution was normalized numerically to integrate to one.
+
+$$
+p(\lambda \mid y)
+=
+\frac{
+\lambda^{24}\exp\!\left(-7\lambda - \frac{\lambda^2}{50}\right)
+}{
+\int_0^\infty
+\lambda^{24}\exp\!\left(-7\lambda - \frac{\lambda^2}{50}\right)\, d\lambda
+},
+\quad \lambda \ge 0
+$$
+The below plot shows the normalized posterior distribution of the average goals rate parameter.
+
+```{r echo=FALSE}
+lambda_grid <- seq(0, 8, length.out = 2000)
+
+unnorm_post <- lambda_grid^24 *
+  exp(-7 * lambda_grid - lambda_grid^2 / 50)
+
+delta <- lambda_grid[2] - lambda_grid[1]
+Z <- sum(unnorm_post) * delta
+
+post <- unnorm_post / Z
+
+plot(lambda_grid, post, type = "l", lwd = 2, col ="red",
+     xlab = expression(lambda~"(average goals per match)"),
+     ylab = "Posterior density",
+     main ="Posterior Distribution of the Average Goals Rate")
+```
+
+
+### b)
+From the information in *a*, the posterior mode of $\lambda$ was obtained.
+
+```{r echo=FALSE}
+lambda_mode <- lambda_grid[which.max(post)]
+lambda_mode
+```
+
+## APPENDIX
+```{r eval=FALSE}
+#3
+#a
+lambda_grid <- seq(0, 8, length.out = 2000)
+
+unnorm_post <- lambda_grid^24 *
+  exp(-7 * lambda_grid - lambda_grid^2 / 50)
+
+delta <- lambda_grid[2] - lambda_grid[1]
+Z <- sum(unnorm_post) * delta
+
+post <- unnorm_post / Z
+
+plot(lambda_grid, post, type = "l", lwd = 2, col ="red",
+     xlab = expression(lambda~"(average goals per match)"),
+     ylab = "Posterior density",
+     main ="Posterior Distribution of the Average Goals Rate")
+
+#b
+lambda_mode <- lambda_grid[which.max(post)]
+lambda_mode
+```
