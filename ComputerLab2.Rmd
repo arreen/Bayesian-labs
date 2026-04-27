@@ -1,0 +1,299 @@
+---
+title: "Computer Lab 2"
+author: "Aron Enström, Max Goldbeck-Löwe"
+date: "2026-04-27"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Computer Lab 2
+
+## 2. Posterior approximation for classification with logistic regression
+### a)
+
+The variables *age*, *duration_of_symptoms* and *white_blood* were standardized, using the provided formula, to mean 0 and variance 1. **x** was created, as a 6-dimensional vector containing five features and a column of 1's, and **y**, the response, was identified as *class_of_diagnosis* variable. 
+
+The specified logistic regression model $\Pr(y = 1 \mid \mathbf{x}, \boldsymbol\beta) = \frac{\exp(\mathbf{x}^\top \boldsymbol\beta)}{1 + \exp(\mathbf{x}^\top \boldsymbol\beta)}$, $\boldsymbol\beta$ being the parameter vector, was then used to model the probability of disease and $\boldsymbol\beta \sim \mathcal N(\mathbf 0, \tau^2 I)$ with $\tau = 2$ was used as prior. The posterior mode $\hat{\boldsymbol\beta}$ was obtained by maximizing the log-posterior using the `optim()` function with the BFGS method. The Hessian matrix of the log‑posterior, evaluated at $\hat{\boldsymbol\beta}$, was used to construct a normal approximation to the posterior distribution of the regression coefficients, $\boldsymbol\beta \mid y \approx \mathcal N(\hat{\boldsymbol\beta}, J_y^{-1}(\hat{\boldsymbol\beta}))$.
+The numerical values of the posterior mode, $\hat{\boldsymbol\beta}$, and the inverse of the information matrix (the covariance matrix), $J_y^{-1}(\hat{\boldsymbol\beta})$, are presented in the tables below.
+
+```{r echo=FALSE}
+beta_hat <- c(
+  -0.38824219,
+  -0.64238957,
+  -0.26614789,
+   0.19312998,
+  -0.13752407,
+  -0.04498936
+)
+
+cov_beta <- matrix(
+  c(
+     0.0977472364, -0.0346230045, -0.0005446211, -0.0029000657, -0.0797576508,  0.0015041923,
+    -0.0346230045,  0.0631838130,  0.0024843401,  0.0028488970,  0.0027926988, -0.0013381872,
+    -0.0005446211,  0.0024843401,  0.0163896959, -0.0001408962,  0.0009300174, -0.0010567361,
+    -0.0029000657,  0.0028488970, -0.0001408962,  0.0149912622,  0.0006546427, -0.0006455806,
+    -0.0797576508,  0.0027926988,  0.0009300174,  0.0006546427,  0.0975458773, -0.0006531182,
+     0.0015041923, -0.0013381872, -0.0010567361, -0.0006455806, -0.0006531182,  0.0163250544
+  ),
+  nrow = 6,
+  byrow = TRUE
+)
+
+names(beta_hat) <- c(
+  "(Intercept)",
+  "gender",
+  "age_std",
+  "duration_of_symptoms_std",
+  "dyspnoea",
+  "white_blood_std"
+)
+
+colnames(cov_beta) <- rownames(cov_beta) <- names(beta_hat)
+
+knitr::kable(
+  data.frame(Coefficient = names(beta_hat), Estimate = beta_hat),
+  row.names = FALSE,
+  caption = "Posterior mode of the regression coefficients"
+)
+
+knitr::kable(
+  cov_beta,
+  caption = "Posterior covariance matrix of the regression coefficients"
+) 
+
+
+```
+
+A 95% equal tail posterior probability interval for the regression coefficient to the variable *age* was then computed. The resulting interval was approximately [-0.517, -0.015]. Since the interval does not include zero, this indicates that age is an important predictor of the probability of disease.
+
+Lastly, the posterior mode was compared to the maximum likelihood estimates obtained from a standard logistic regression fitted using `glm()`, and the estimates were found to be very similar.
+
+### b)
+To assess the predictive implications of the fitted model, the posterior predictive distribution of the disease probability was considered for a new individual. The individual was specified as a 38‑year‑old woman with 10 days of symptoms, no dyspnoea, and a white blood cell count of 11000. The corresponding covariate vector $\mathbf{x}_{\text{new}}$ was constructed using the same standardization as in part (a).
+
+Using the normal approximation obtained previously, $\boldsymbol\beta \mid y \approx \mathcal N(\hat{\boldsymbol\beta}, J_y^{-1}(\hat{\boldsymbol\beta}))$, samples of the regression coefficients were drawn from this distribution. For each draw $\boldsymbol\beta^{(s)}$, the predicted probability of disease was computed as
+$\Pr(y = 1 \mid \mathbf{x}_{\text{new}}, \boldsymbol\beta^{(s)}) = \{1 + \exp(-\mathbf{x}_{\text{new}}^\top \boldsymbol\beta^{(s)})\}^{-1}$, yielding an approximation to the posterior predictive distribution of $\Pr(y = 1 \mid \mathbf{x}_{\text{new}})$.
+The below plot displays the resulting posterior predictive distribution. 
+
+```{r echo=FALSE, warning=FALSE}
+Disease <- read.csv("Disease.csv")
+
+age_mean <- mean(Disease$age)
+age_sd <- sd(Disease$age)
+
+dur_mean <- mean(Disease$duration_of_symptoms)
+dur_sd <- sd(Disease$duration_of_symptoms)
+
+wb_mean <- mean(Disease$white_blood)
+wb_sd <- sd(Disease$white_blood)
+
+age_new <- (38 - age_mean) / age_sd
+dur_new <- (10 - dur_mean) / dur_sd
+wb_new  <- (11000 - wb_mean) / wb_sd
+
+#covariate vector
+x_new <- c(
+  1,        # intercept
+  1,        # woman = 1
+  age_new,
+  dur_new,
+  0,        # no laboured breathing
+  wb_new
+)
+
+library(mvtnorm)
+
+
+posterior_predictive_draws <- function(n_sim, beta_hat, cov_beta, x_new) {
+  
+  #draws from the normal approximation of the posterior
+  beta_draws <- rmvnorm(
+    n_sim,
+    mean = beta_hat,
+    sigma = cov_beta
+  )
+  
+  #linear predictors
+  linpred <- beta_draws %*% x_new
+  
+  #turn into porbabilities, apply logistic function
+  p_draws <- 1 / (1 + exp(-linpred))
+  
+  return(as.numeric(p_draws))
+}
+
+p_draws <- posterior_predictive_draws(
+  n_sim = 5000,
+  beta_hat = beta_hat,
+  cov_beta = cov_beta,
+  x_new = x_new
+)
+
+hist(
+  p_draws,
+  breaks = 40,
+  probability = TRUE,
+  col = "lightblue",
+  border = "white",
+  main = expression("Posterior Predictive Distribution of " * Pr(y == 1 ~ "|" ~ x_new)),
+  xlab = expression(Pr(y == 1 ~ "|" ~ x_new))
+)
+```
+
+The distribution is centered around approximately 0.35–0.40, indicating that, the probability that this individual has the disease is most likely in this range. The spread of the distribution reflects uncertainty in the regression coefficients propagated through the logistic regression model.
+
+## APPENDIX
+``` {r eval=FALSE}
+#2
+#a
+Disease <- read.csv("Disease.csv")
+
+standardize <- function(x) {
+  (x - mean(x)) / sd(x)
+}
+
+age_std <- standardize(Disease$age)
+duration_of_symptoms_std <- standardize(Disease$duration_of_symptoms)
+white_blood_std <- standardize(Disease$white_blood)
+
+X <- model.matrix(
+  ~ gender + age_std + duration_of_symptoms_std + dyspnoea + white_blood_std,
+  data = Disease
+)
+
+y <- Disease$class_of_diagnosis
+
+
+logPost <- function(betas, y, X, mu, Sigma_inv) {
+
+  linPred <- X %*% betas
+  
+  logLik <- sum(linPred * y - log(1 + exp(linPred)))
+  
+  diff <- betas - mu
+  logPrior <- -0.5 * t(diff) %*% Sigma_inv %*% diff
+  
+  as.numeric(logLik + logPrior)
+}
+
+p <- ncol(X)
+
+mu <- rep(0, p)
+Sigma <- diag(2^2, p)
+Sigma_inv <- solve(Sigma)
+
+initVal <- rep(0, p)
+
+OptimRes <- optim(
+  par = initVal,
+  fn = logPost,
+  gr = NULL,
+  y = y,
+  X = X,
+  mu = mu,
+  Sigma_inv = Sigma_inv,
+  method = "BFGS",
+  control = list(fnscale = -1),  # maximize
+  hessian = TRUE
+)
+
+
+beta_hat <- OptimRes$par
+beta_hat
+
+J <- -OptimRes$hessian
+cov_beta <- solve(J)
+cov_beta
+
+age_index <- which(colnames(X) == "age_std")
+
+age_mean <- beta_hat[age_index]
+age_sd <- sqrt(cov_beta[age_index, age_index])
+
+age_CI <- c(
+  age_mean - 1.96 * age_sd,
+  age_mean + 1.96 * age_sd
+)
+
+age_CI
+
+glm_fit <- glm(
+  class_of_diagnosis ~ gender + age_std +
+    duration_of_symptoms_std + dyspnoea + white_blood_std,
+  data = Disease,
+  family = binomial
+)
+
+coef(glm_fit)
+
+beta_hat
+
+#b
+age_mean <- mean(Disease$age)
+age_sd <- sd(Disease$age)
+
+dur_mean <- mean(Disease$duration_of_symptoms)
+dur_sd <- sd(Disease$duration_of_symptoms)
+
+wb_mean <- mean(Disease$white_blood)
+wb_sd <- sd(Disease$white_blood)
+
+age_new <- (38 - age_mean) / age_sd
+dur_new <- (10 - dur_mean) / dur_sd
+wb_new  <- (11000 - wb_mean) / wb_sd
+
+colnames(X)
+
+#covariate vector
+x_new <- c(
+  1,        # intercept
+  1,        # woman = 1
+  age_new,
+  dur_new,
+  0,        # no laboured breathing
+  wb_new
+)
+
+library(mvtnorm)
+
+
+posterior_predictive_draws <- function(n_sim, beta_hat, cov_beta, x_new) {
+  
+  #draws from the normal approximation of the posterior
+  beta_draws <- rmvnorm(
+    n_sim,
+    mean = beta_hat,
+    sigma = cov_beta
+  )
+  
+  #linear predictors
+  linpred <- beta_draws %*% x_new
+  
+  #turn into porbabilities, apply logistic function
+  p_draws <- 1 / (1 + exp(-linpred))
+  
+  return(as.numeric(p_draws))
+}
+
+p_draws <- posterior_predictive_draws(
+  n_sim = 5000,
+  beta_hat = beta_hat,
+  cov_beta = cov_beta,
+  x_new = x_new
+)
+
+hist(
+  p_draws,
+  breaks = 40,
+  probability = TRUE,
+  col = "lightblue",
+  border = "white",
+  main = expression("Posterior Predictive Distribution of " * Pr(y == 1 ~ "|" ~ x_new)),
+  xlab = expression(Pr(y == 1 ~ "|" ~ x_new))
+)
+
+mean(p_draws)
+```
